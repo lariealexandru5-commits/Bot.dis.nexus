@@ -6,16 +6,29 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const http = require("http");
+
+// =========================
+// CONFIG
+// =========================
+
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// Server pentru Render
+// =========================
+// RENDER WEB SERVER
+// =========================
+
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
@@ -25,46 +38,48 @@ http.createServer((req, res) => {
   console.log(`Web server pornit pe portul ${PORT}`);
 });
 
-client.once("ready", () => {
-  console.log(`Botul este online ca ${client.user.tag}!`);
-});
+// =========================
+// REGISTER /SETUP
+// =========================
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+async function registerCommands() {
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("setup")
+      .setDescription("Afișează panoul de Ticket și Verify")
+      .toJSON()
+  ];
 
-  // /setup
-  if (interaction.isChatInputCommand() && interaction.commandName === "setup") {
-    const embed = new EmbedBuilder()
-      .setTitle("🎫 Bot Test")
-      .setDescription(
-        "Bine ai venit!\n\n" +
-        "🎫 Apasă **Create Ticket** pentru a deschide un ticket.\n" +
-        "✅ Apasă **Verify** pentru verificare."
-      );
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("create_ticket")
-        .setLabel("Create Ticket")
-        .setEmoji("🎫")
-        .setStyle(ButtonStyle.Primary),
+  try {
+    console.log("Înregistrez comanda /setup...");
 
-      new ButtonBuilder()
-        .setCustomId("verify")
-        .setLabel("Verify")
-        .setEmoji("✅")
-        .setStyle(ButtonStyle.Success)
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      {
+        body: commands
+      }
     );
 
-    await interaction.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    return interaction.reply({
-      content: "Panoul a fost creat! ✅",
-      ephemeral: true
-    });
+    console.log("Comanda /setup a fost înregistrată! ✅");
+  } catch (error) {
+    console.error("Eroare la înregistrarea comenzii:", error);
   }
+}
 
-  //
+// =========================
+// BOT READY
+// =========================
+
+client.once("ready", async () => {
+  console.log(`Botul este online ca ${client.user.tag}!`);
+
+  await registerCommands();
+});
+
+// =========================
+// INTERACTIONS
+// =========================
+
+client.on("interactionCreate", async
