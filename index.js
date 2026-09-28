@@ -1,206 +1,336 @@
 const {
   Client,
   GatewayIntentBits,
-  ChannelType,
-  PermissionFlagsBits,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  REST,
-  Routes,
-  SlashCommandBuilder
+  PermissionsBitField
 } = require("discord.js");
 
 const http = require("http");
 
+// =========================
+// CONFIG
+// =========================
+
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+// =========================
+// WEB SERVER - pentru Render
+// =========================
 
-// Render
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
   res.writeHead(200);
-  res.end("Bot is online!");
+  res.end("Botul este online!");
 }).listen(PORT, () => {
   console.log(`Web server pornit pe portul ${PORT}`);
 });
 
-// /setup
-async function registerCommands() {
-  const commands = [
-    new SlashCommandBuilder()
-      .setName("setup")
-      .setDescription("Afișează panoul de Ticket și Verify")
-      .toJSON()
-  ];
+// =========================
+// DISCORD CLIENT
+// =========================
 
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds
+  ]
+});
+
+// =========================
+// COMANDA /setup
+// =========================
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName("setup")
+    .setDescription("Afișează panoul de Ticket și Verify")
+    .toJSON()
+];
+
+// =========================
+// BOT READY
+// =========================
+
+client.once("ready", async () => {
+  console.log(`Botul este online ca ${client.user.tag}!`);
 
   try {
     console.log("Înregistrez comanda /setup...");
 
+    const rest = new REST({ version: "10" }).setToken(TOKEN);
+
     await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: commands }
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      {
+        body: commands
+      }
     );
 
     console.log("Comanda /setup a fost înregistrată!");
   } catch (error) {
-    console.error("Eroare:", error);
+    console.error("Eroare la înregistrarea comenzii:", error);
   }
-}
-
-client.once("ready", async () => {
-  console.log(`Botul este online ca ${client.user.tag}!`);
-  await registerCommands();
 });
+
+// =========================
+// INTERACTIONS
+// =========================
 
 client.on("interactionCreate", async (interaction) => {
 
-  // /setup
-  if (
-    interaction.isChatInputCommand() &&
-    interaction.commandName === "setup"
-  ) {
-    const embed = new EmbedBuilder()
-      .setTitle("🎫 Bot Test")
-      .setDescription(
-        "Bine ai venit!\n\n" +
-        "🎫 **Create Ticket** - deschide un ticket\n" +
-        "✅ **Verify** - verificare"
-      );
+  try {
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("create_ticket")
-        .setLabel("Create Ticket")
-        .setEmoji("🎫")
-        .setStyle(ButtonStyle.Primary),
+    // =========================
+    // /setup
+    // =========================
 
-      new ButtonBuilder()
-        .setCustomId("verify")
-        .setLabel("Verify")
-        .setEmoji("✅")
-        .setStyle(ButtonStyle.Success)
-    );
+    if (interaction.isChatInputCommand()) {
 
-    await interaction.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
+      if (interaction.commandName === "setup") {
 
-    await interaction.reply({
-      content: "Panoul a fost creat!",
-      ephemeral: true
-    });
+        const embed = new EmbedBuilder()
+          .setTitle("🎫 Ticket & Verification")
+          .setDescription(
+            "Folosește butoanele de mai jos pentru test."
+          );
 
-    return;
-  }
+        const buttons = new ActionRowBuilder()
+          .addComponents(
 
-  // Verify
-  if (
-    interaction.isButton() &&
-    interaction.customId === "verify"
-  ) {
-    await interaction.reply({
-      content: "✅ Verificare reușită! (mod test)",
-      ephemeral: true
-    });
+            new ButtonBuilder()
+              .setCustomId("create_ticket")
+              .setLabel("🎫 Creează Ticket")
+              .setStyle(ButtonStyle.Primary),
 
-    return;
-  }
+            new ButtonBuilder()
+              .setCustomId("verify")
+              .setLabel("✅ Verificare")
+              .setStyle(ButtonStyle.Success)
 
-  // Create ticket
-  if (
-    interaction.isButton() &&
-    interaction.customId === "create_ticket"
-  ) {
-    const existing = interaction.guild.channels.cache.find(
-      channel =>
-        channel.name === `ticket-${interaction.user.id}` &&
-        channel.type === ChannelType.GuildText
-    );
+          );
 
-    if (existing) {
-      await interaction.reply({
-        content: `Ai deja un ticket: ${existing}`,
-        ephemeral: true
-      });
+        // IMPORTANT:
+        // Răspundem direct la interaction,
+        // nu folosim interaction.channel.send()
 
-      return;
+        await interaction.reply({
+          embeds: [embed],
+          components: [buttons]
+        });
+
+        console.log(
+          `/setup folosit de ${interaction.user.tag}`
+        );
+
+        return;
+      }
     }
 
-    const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`,
-      type: ChannelType.GuildText,
+    // =========================
+    // BUTOANE
+    // =========================
 
-      permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionFlagsBits.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory
-          ]
+    if (interaction.isButton()) {
+
+      // =========================
+      // VERIFY
+      // =========================
+
+      if (interaction.customId === "verify") {
+
+        await interaction.reply({
+          content: "✅ Verificare reușită! (mod test)",
+          ephemeral: true
+        });
+
+        console.log(
+          `${interaction.user.tag} a apăsat Verify.`
+        );
+
+        return;
+      }
+
+      // =========================
+      // CREATE TICKET
+      // =========================
+
+      if (interaction.customId === "create_ticket") {
+
+        if (!interaction.guild) {
+          await interaction.reply({
+            content: "❌ Ticket-ul poate fi creat doar pe server.",
+            ephemeral: true
+          });
+          return;
         }
-      ]
-    });
 
-    const embed = new EmbedBuilder()
-      .setTitle("🎫 Ticket")
-      .setDescription(
-        `Salut ${interaction.user}!\n\n` +
-        "Acesta este ticketul tău de test.\n\n" +
-        "Apasă 🔒 pentru a închide ticketul."
+        await interaction.deferReply({
+          ephemeral: true
+        });
+
+        const channel = await interaction.guild.channels.create({
+          name: `ticket-${interaction.user.username}`,
+          type: 0, // GuildText
+
+          permissionOverwrites: [
+
+            {
+              id: interaction.guild.roles.everyone.id,
+
+              deny: [
+                PermissionsBitField.Flags.ViewChannel
+              ]
+            },
+
+            {
+              id: interaction.user.id,
+
+              allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.ReadMessageHistory
+              ]
+            },
+
+            {
+              id: client.user.id,
+
+              allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.ReadMessageHistory,
+                PermissionsBitField.Flags.ManageChannels
+              ]
+            }
+
+          ]
+        });
+
+        const ticketEmbed = new EmbedBuilder()
+          .setTitle("🎫 Ticket")
+          .setDescription(
+            `Salut ${interaction.user}!\n\nAcesta este ticket-ul tău de test.`
+          );
+
+        const closeButton = new ActionRowBuilder()
+          .addComponents(
+
+            new ButtonBuilder()
+              .setCustomId("close_ticket")
+              .setLabel("🔒 Închide Ticket")
+              .setStyle(ButtonStyle.Danger)
+
+          );
+
+        await channel.send({
+          content: `${interaction.user}`,
+          embeds: [ticketEmbed],
+          components: [closeButton]
+        });
+
+        await interaction.editReply({
+          content: `✅ Ticket creat: ${channel}`
+        });
+
+        console.log(
+          `Ticket creat pentru ${interaction.user.tag}`
+        );
+
+        return;
+      }
+
+      // =========================
+      // CLOSE TICKET
+      // =========================
+
+      if (interaction.customId === "close_ticket") {
+
+        await interaction.reply({
+          content: "🔒 Ticket-ul se închide...",
+          ephemeral: true
+        });
+
+        console.log(
+          `Ticket închis de ${interaction.user.tag}`
+        );
+
+        setTimeout(async () => {
+
+          try {
+
+            if (interaction.channel) {
+              await interaction.channel.delete();
+            }
+
+          } catch (error) {
+
+            console.error(
+              "Nu am putut șterge ticket-ul:",
+              error
+            );
+
+          }
+
+        }, 2000);
+
+        return;
+      }
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Eroare la interaction:",
+      error
+    );
+
+    try {
+
+      if (interaction.replied || interaction.deferred) {
+
+        await interaction.followUp({
+          content: "❌ A apărut o eroare. Verifică logurile Render.",
+          ephemeral: true
+        });
+
+      } else {
+
+        await interaction.reply({
+          content: "❌ A apărut o eroare. Verifică logurile Render.",
+          ephemeral: true
+        });
+
+      }
+
+    } catch (replyError) {
+
+      console.error(
+        "Nu am putut trimite mesajul de eroare:",
+        replyError
       );
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("close_ticket")
-        .setLabel("Închide Ticket")
-        .setEmoji("🔒")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await channel.send({
-      content: `${interaction.user}`,
-      embeds: [embed],
-      components: [row]
-    });
-
-    await interaction.reply({
-      content: `Ticket creat: ${channel}`,
-      ephemeral: true
-    });
-
-    return;
-  }
-
-  // Close ticket
-  if (
-    interaction.isButton() &&
-    interaction.customId === "close_ticket"
-  ) {
-    await interaction.reply(
-      "🔒 Ticketul se închide în 3 secunde..."
-    );
-
-    setTimeout(() => {
-      interaction.channel.delete().catch(() => {});
-    }, 3000);
-
-    return;
+    }
   }
 });
+
+// =========================
+// ERORI CLIENT
+// =========================
+
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
+});
+
+// =========================
+// LOGIN
+// =========================
 
 client.login(TOKEN);
